@@ -1,6 +1,9 @@
 #pragma once
 
 #include <CmdMessenger.h>
+#include <ArduinoJson.h>
+#include <avr/pgmspace.h>
+
 #include "Exception.h"
 
 char fieldSeparator = ',';
@@ -13,30 +16,36 @@ enum Commands : byte
 	
 	cmdHelp, // 1
 	cmdError, // 2
-	cmdPrintStatus, // 3
-	cmdEnableDrive, // 4
-	cmdDisableDrive, // 5
-	cmdGetPosition, // 6
-	cmdGotoPosition, // 7
-	cmdWalk, // 8
-	cmdPulse, // 9
-	cmdTare, // 10
+	cmdReportStatus, // 3
+	cmdCheckPolarity, // 4
+	cmdEnableDrive, // 5
+	cmdDisableDrive, // 6
+	cmdGetPosition, // 7
+	cmdGotoPosition, // 8
+	cmdWalk, // 9
+	cmdPulse, // 10
+	cmdTare, // 11
 
 	responseAcknowledge,
 	responseText,
+	responseStatusReport,
 	reponseGetPosition
 };
 
 CmdMessenger cmdMessenger = CmdMessenger(Serial, fieldSeparator, commandSeparator, escapeCharacter);
+StaticJsonBuffer<200> jsonBuffer;
 
 void attachCommandCallbacks();
-void printStatus();
+void reportStatus(JsonObject &);
+Exception checkPolarity();
 void enableDrive();
 void disableDrive();
 void gotoPosition(Encoder::Position position);
 void walk(Encoder::PositionDelta deltaPosition);
 void pulse(uint16_t pulseCount, float torque, uint16_t durationMillis, uint16_t delayMillis);
 void tare(Encoder::Position positionMark);
+
+void sendException(const Exception &);
 
 Encoder::Position getPosition();
 
@@ -45,73 +54,89 @@ void acknowledgeCommand(byte commandIndex)
 	cmdMessenger.sendBinCmd<byte>(responseAcknowledge, commandIndex);
 }
 
+void sendPositionResponse()
+{
+	cmdMessenger.sendBinCmd(Commands::reponseGetPosition, getPosition());
+}
+
 void onCmdHelp()
 {
 	acknowledgeCommand(cmdHelp);
 
-	auto helpString = "Available commands:"
-	"0   - Acknowledge"
-	"1   - Print help"
-	"2   - Error"
-	"3   - Print status"
-	"4   - Enable drive"
-	"5   - Disable drive"
-	"6   - Get axis position"
-	"7   - Goto position <int position>"
-	"8   - Walk <int delta>"
-	"9   - Pulse <int count, float torque, int durationMillis, int delayMillis>"
-	"10  - Tare <int positionMark>";
+	const char helpString[] PROGMEM = "Available commands:"
+	"0	- Acknowledge"
+	"1	- Print help"
+	"2	- Error"
+	"3	- Report status"
+	"4	- Check polarity"
+	"5	- Enable drive"
+	"6	- Disable drive"
+	"7	- Get axis position"
+	"8	- Goto position <int position>"
+	"9	- Walk <int delta>"
+	"10	- Pulse <int count, float torque, int durationMillis, int delayMillis>"
+	"11	- Tare <int positionMark>";
 
 	cmdMessenger.sendCmd(responseText, helpString);
 }
 
-void onCmdPrintStatus()
+void onCmdReportStatus()
 {
-	acknowledgeCommand(cmdPrintStatus);
+	acknowledgeCommand(Commands::cmdReportStatus);
 
-	printStatus();
+	JsonObject & root = jsonBuffer.createObject();
+
+	reportStatus(root);
+
+	char buffer[150];
+	root.printTo(buffer, 150);
+
+	cmdMessenger.sendCmd(Commands::responseStatusReport, buffer);
+}
+
+void onCmdCheckPolarity()
+{
+	acknowledgeCommand(Commands::cmdCheckPolarity);
+	
+	auto exception = checkPolarity();
+	sendException(exception);
 }
 
 void onCmdDisableDrive()
 {
-	acknowledgeCommand(cmdDisableDrive);
+	acknowledgeCommand(Commands::cmdDisableDrive);
 	disableDrive();
 }
 
 void onCmdEnableDrive()
 {
-	acknowledgeCommand(cmdEnableDrive);
+	acknowledgeCommand(Commands::cmdEnableDrive);
 	enableDrive();
-}
-
-void sendPositionResponse()
-{
-	cmdMessenger.sendBinCmd(reponseGetPosition, getPosition());
 }
 
 void onCmdGetPosition()
 {
-	acknowledgeCommand(cmdGetPosition);
+	acknowledgeCommand(Commands::cmdGetPosition);
 
 	sendPositionResponse();
 }
 
 void onCmdGotoPosition()
 {
-	acknowledgeCommand(cmdGotoPosition);
+	acknowledgeCommand(Commands::cmdGotoPosition);
 	auto position = cmdMessenger.readBinArg<Encoder::Position>();
 	gotoPosition(position);
 }
 
 void onCmdWalk()
 {
-	acknowledgeCommand(cmdWalk);
+	acknowledgeCommand(Commands::cmdWalk);
 	walk(cmdMessenger.readBinArg<Encoder::PositionDelta>());
 }
 
 void onCmdPulse()
 {
-	acknowledgeCommand(cmdPulse);
+	acknowledgeCommand(Commands::cmdPulse);
 
 	auto pulseCount = (uint16_t) cmdMessenger.readBinArg<unsigned int>();
 	auto torque = cmdMessenger.readBinArg<float>();
@@ -125,14 +150,14 @@ void onCmdPulse()
 
 void onCmdTare()
 {
-	acknowledgeCommand(cmdTare);
+	acknowledgeCommand(Commands::cmdTare);
 	auto positionMark = cmdMessenger.readBinArg<Encoder::Position>();
 	tare(positionMark);
 }
 
 void onCmdUnknown()
 {
-	cmdMessenger.sendBinCmd<ErrorType>(cmdError, Error::UnknownCommand);
+	cmdMessenger.sendBinCmd<ErrorType>(Commands::cmdError, Error::UnknownCommand);
 	onCmdHelp();
 }
 
@@ -146,24 +171,27 @@ void setupCommands()
 void attachCommandCallbacks()
 {
 	cmdMessenger.attach(onCmdUnknown);
-	cmdMessenger.attach(cmdHelp, onCmdHelp);
-	cmdMessenger.attach(cmdPrintStatus, onCmdPrintStatus);
-	cmdMessenger.attach(cmdEnableDrive, onCmdEnableDrive);
-	cmdMessenger.attach(cmdDisableDrive, onCmdDisableDrive);
-	cmdMessenger.attach(cmdGetPosition, onCmdGetPosition);
-	cmdMessenger.attach(cmdGotoPosition, onCmdGotoPosition);
-	cmdMessenger.attach(cmdWalk, onCmdWalk);
-	cmdMessenger.attach(cmdPulse, onCmdPulse);
-	cmdMessenger.attach(cmdTare, onCmdTare);
+	cmdMessenger.attach(Commands::cmdHelp, onCmdHelp);
+	cmdMessenger.attach(Commands::cmdReportStatus, onCmdReportStatus);
+	cmdMessenger.attach(Commands::cmdCheckPolarity, onCmdCheckPolarity);
+	cmdMessenger.attach(Commands::cmdEnableDrive, onCmdEnableDrive);
+	cmdMessenger.attach(Commands::cmdDisableDrive, onCmdDisableDrive);
+	cmdMessenger.attach(Commands::cmdGetPosition, onCmdGetPosition);
+	cmdMessenger.attach(Commands::cmdGotoPosition, onCmdGotoPosition);
+	cmdMessenger.attach(Commands::cmdWalk, onCmdWalk);
+	cmdMessenger.attach(Commands::cmdPulse, onCmdPulse);
+	cmdMessenger.attach(Commands::cmdTare, onCmdTare);
 }
 
-void sendException(const Exception &exception)
+void sendException(const Exception & exception)
 {
-	cmdMessenger.sendCmdStart(cmdError);
-	cmdMessenger.sendCmdBinArg<int>(exception.errorNumber);
-	for (uint8_t i = 0; i < exception.argumentCount; i++)
-	{
-		cmdMessenger.sendCmdBinArg<int>(exception.arguments[i]);
+	if(exception.errorNumber != Error::NoError) {
+		cmdMessenger.sendCmdStart(cmdError);
+		cmdMessenger.sendCmdBinArg<int>(exception.errorNumber);
+		for (uint8_t i = 0; i < exception.argumentCount; i++)
+		{
+			cmdMessenger.sendCmdBinArg<int>(exception.arguments[i]);
+		}
+		cmdMessenger.sendCmdEnd();
 	}
-	cmdMessenger.sendCmdEnd();
 }

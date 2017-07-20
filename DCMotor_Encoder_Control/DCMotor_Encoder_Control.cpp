@@ -20,16 +20,20 @@ void loop() {
     }
 }
 
-void printStatus() {
-    axis.printStatus();
+void reportStatus(JsonObject & json) {
+    axis.reportStatus(json);
+}
+
+Exception checkPolarity() {
+    return axis.checkPolarity();
 }
 
 void enableDrive() {
-    axis.setEnabled(true);
+    axis.setDriveEnabled(true);
 }
 
 void disableDrive() {
-    axis.setEnabled(false);
+    axis.setDriveEnabled(false);
 }
 
 void gotoPosition(Encoder::Position position) {

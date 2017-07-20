@@ -3,6 +3,8 @@
 typedef unsigned long ErrorType;
 enum Error : ErrorType {
     NoError = 0,
+
+    GeneralTimeout,
     
     UnknownCommand,
     PulseOverrun, // whilst navigating in the near zone, we took too many pulses to adjust our position
@@ -21,6 +23,10 @@ struct Exception {
     : Exception(errorNumber) {
         this->arguments[0] = argument;
         this->argumentCount = 1;
+    }
+
+    operator bool() const {
+        return this->errorNumber != Error::NoError;
     }
 
     Error errorNumber = Error::NoError;

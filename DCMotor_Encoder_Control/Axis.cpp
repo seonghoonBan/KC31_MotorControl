@@ -13,21 +13,43 @@ T sign(T value) {
 }
 
 //----------
+Axis::Config::Config() {
+	this->stallTorque = 0.3f;
+	this->pulseCount = 16;
+	this->pulseTorque = 0;
+	this->pulseDuration = 40;
+	this->pulseDurationPerStep = 5;
+	this->pulseWait = 100;
+	this->pulseSettle = 500;
+
+	this->switchOutputPolarity = false;
+}
+
+//----------
 void Axis::setup(const DCMotor::Pins & motorPins
 				, const Encoder::Pins & encoderPins
 				, const Config & config) {
 	this->motor.setup(motorPins);
-	this->encoder.setup(encoderPins, Encoder::InterruptType::Pin);
+	this->encoder.setup(encoderPins);
 	this->config = config;
 
-	this->setEnabled(false);
+	this->setDriveEnabled(false);
+
+	{
+		this->checkPolarity(); // this will always walk off axis
+
+		//walk back to home
+		this->setDriveEnabled(true);
+		while(!this->encoder.getPosition() == 0) {
+			this->update();
+		}
+		this->setDriveEnabled(false);
+	}
 }
 
 //----------
 Exception Axis::update() {
-	this->encoder.update();
-
-	if(this->enabled) {
+	if(this->driveEnabled) {
 		float deltaT;
 		{
 			auto now = micros();
@@ -49,22 +71,21 @@ Exception Axis::update() {
 
 			//calculate pulse power
 			float pulsePower = 1.0f - this->config.stallTorque;
-			pulsePower *= PULSE_TORQUE;
+			pulsePower *= this->config.pulseTorque;
 			pulsePower += this->config.stallTorque;
 
 			//walk the last few steps when we're close
-			for(uint8_t i=0; i<PULSE_COUNT; i++) {
-					auto pulseCount = abs(deltaPosition) > 4 ? abs(deltaPosition) / 2 : 1;
+			for(uint8_t i=0; i<this->config.pulseCount; i++) {
+					//auto pulseCount = abs(deltaPosition) > 4 ? abs(deltaPosition) / 2 : 1;
 
 					this->pulseAxis(1
 						, pulsePower * sign(deltaPosition)
-						, PULSE_DURATION + PULSE_DURATION_PERSTEP * abs(deltaPosition)
-						, PULSE_WAIT);
+						, this->config.pulseDuration + this->config.pulseDurationPerStep * abs(deltaPosition)
+						, this->config.pulseWait);
 
 					//pause a little while to settle after last pulse
-					delay(PULSE_SETTLE);
+					delay(this->config.pulseSettle);
 
-					this->encoder.update();
 					position = this->encoder.getPosition();
 					deltaPosition = this->targetPosition - position;
 
@@ -89,18 +110,60 @@ Exception Axis::update() {
 			if(abs(torque) < this->config.stallTorque) {
 				torque += this->config.stallTorque * sign(torque);
 			}
-			this->motor.setTorque(torque);
+			this->motor.setTorque(torque * this->getOutputPolarity());
 		}
 	} else {
 		this->motor.setTorque(0.0f);
 	}
 
-	return Error::NoError;
+	return Exception(Error::NoError);
 }
 
 //----------
-void Axis::setEnabled(bool enabled) {
-	this->enabled = enabled;
+Exception Axis::checkPolarity() {
+	auto wasDriveEnabled = this->driveEnabled;
+
+	if(wasDriveEnabled) {
+		this->setDriveEnabled(false);
+
+		//wait until stopped
+		bool success = false;
+		for(int i=0; i<100; i++) {
+			auto startPosition = this->encoder.getPosition();
+			delay(100);
+			auto endPosition = this->encoder.getPosition();
+			if(endPosition - startPosition == 0) {
+				success = true;
+				break;
+			}
+		}
+
+		if(!success) {
+			return Exception(Error::GeneralTimeout);
+		}
+	}
+
+	this->config.switchOutputPolarity = false;
+
+	auto startPosition = this->encoder.getPosition();
+	this->pulseAxis(1, 1.0f, 100, 0);
+	auto endPosition = this->encoder.getPosition();
+
+	if(endPosition < startPosition) {
+		this->config.switchOutputPolarity = true;
+	}
+
+	return Exception(Error::NoError);
+}
+
+//----------
+float Axis::getOutputPolarity() const {
+	return this->config.switchOutputPolarity ? -1.0f : 1.0f;
+}
+
+//----------
+void Axis::setDriveEnabled(bool enabled) {
+	this->driveEnabled = enabled;
 }
 
 //----------
@@ -116,7 +179,7 @@ void Axis::walk(Encoder::PositionDelta deltaPosition) {
 //---------
 void Axis::pulseAxis(uint16_t pulseCount, float torque, uint16_t durationMillis, uint16_t delayMillis) {
 	for(uint16_t pulseIndex = 0; pulseIndex < pulseCount; ++pulseIndex) {
-		this->motor.setTorque(torque);
+		this->motor.setTorque(torque * this->getOutputPolarity());
 		delay(durationMillis);
 		this->motor.setTorque(0.0f);
 
@@ -127,18 +190,18 @@ void Axis::pulseAxis(uint16_t pulseCount, float torque, uint16_t durationMillis,
 }
 
 //---------
-void Axis::printStatus() const {
-	Serial.print("Enabled : " );
-	Serial.println(this->enabled ? "True" : "False");
+void Axis::reportStatus(JsonObject & json) const {
+	json["driveEnabled"] = this->driveEnabled;
+	json["targetPosition"] = this->targetPosition;
+	json["velocity"] = this->velocity;
+	
+	{
+		auto & jsonEncoder = json.createNestedObject("encoder");
+		this->encoder.reportStatus(json["encoder"]);
+	}
 
-	Serial.print("Target position : " );
-	Serial.println((int) this->targetPosition);
-
-	Serial.print("Velocity : " );
-	Serial.println(this->velocity);
-
-	Serial.println("Encoder : ");
-	this->encoder.printStatus();
-	Serial.println("Motor : ");
-	this->motor.printStatus();
+	{
+		auto & jsonMotor = json.createNestedObject("motor");
+		this->motor.reportStatus(jsonMotor);
+	}
 }

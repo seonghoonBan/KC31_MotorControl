@@ -1,11 +1,13 @@
 #pragma once
-#include "FlexiTimer2.h"
 
-void encoderPinChanged();
-void timerCallback();
-void initialiseTimer();
+#include <Arduino.h>
+#include <ArduinoJson.h>
 
-//#define PRINT_READS_AND_WRITES
+//comment out this line if you want to support multiple encoders
+#define ENCODER_ONLY_ONE
+
+//uncomment this line if you want to print errors to serial
+//#define ENCODER_PRINT_ERROR_STATES
 
 class Encoder
 {
@@ -13,11 +15,7 @@ class Encoder
 	typedef long Position;
 	typedef Position PositionDelta;
 	
-	enum InterruptType
-	{
-		Timer,
-		Pin
-	};
+	typedef int8_t State;
 
 	struct Pins
 	{
@@ -27,17 +25,14 @@ class Encoder
 
 	Encoder();
 
-	void setup(const Pins &pins, InterruptType interruptType);
-	void update();
+	void setup(const Pins &pins);
 
 	Position getPosition() const;
+	
 	void tarePosition(Position positionMark);
 	unsigned long getErrorCount() const;
-
-	void printStatus() const;
-
+	void reportStatus(JsonObject &) const;
 	void pinChangeCallback();
-	void timerCallback();
 
 	static Encoder *&getFirst()
 	{
@@ -45,34 +40,26 @@ class Encoder
 		return first;
 	}
 
+#ifdef ENCODER_ONLY_ONE
+#else
 	Encoder *&getNext()
 	{
 		return this->next;
 	}
+#endif
 
   protected:
-	static int8_t calculateState(bool A, bool B);
-
-	void writeStateBuffer(int8_t state);
-	void processStateBuffer() const;
-	void processState(int8_t state);
+	static State calculateState(bool A, bool B);
+	void processState(State state);
 
 	Pins pins;
 
-	mutable int8_t lastWroteState = -1; // for timer only
-	mutable volatile int8_t state = -1; //-1 = uninitialised state
+	volatile State state = -1; //-1 = uninitialised state
 	Position position = 0;
 	unsigned long errorCount = 0;
 
+#ifdef ENCODER_ONLY_ONE
+#else
 	Encoder *next = nullptr;
-
-#define StateCacheRingBuffer_SIZE 64
-	struct StateCacheRingBuffer
-	{
-		volatile int8_t buffer[StateCacheRingBuffer_SIZE];
-		volatile uint8_t readPosition = 0;
-		volatile uint8_t writePosition = 0;
-	};
-
-	mutable StateCacheRingBuffer stateCacheRingBuffer;
+#endif
 };

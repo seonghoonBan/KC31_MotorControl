@@ -1,28 +1,28 @@
 #pragma once
+
 #include "DCMotor.h"
 #include "Encoder.h"
 
-#include "Commands.h"
 #include "Exception.h"
 
-#define PULSE_COUNT 16
-#define PULSE_TORQUE 0 /* 0 = use stall torque. 1 = use full torque */
-#define PULSE_DURATION 40
-#define PULSE_DURATION_PERSTEP 5
-#define PULSE_WAIT 100
-#define PULSE_SETTLE 500
+#include <ArduinoJson.h>
 
 //a class for managing an axis (i.e. an encoder and a motor)
 class Axis {
 public:
 	struct Config {
+		Config();
+
 		float stallTorque;
+
 		int pulseCount;
-		float  pulseTorque;
-		int pulseDuration;
-		int pulseDurationPerStep;
-		int pulseWait;
-		int pulseSettle;
+		float pulseTorque; /* 0 = use stall torque. 1 = use full torque */
+		int pulseDuration; // ms
+		int pulseDurationPerStep; //ms extra per step
+		int pulseWait; // ms between pulses
+		int pulseSettle; // ms after last pulse before taking a measurement
+
+		bool switchOutputPolarity; // false = ouput polarity matches input polarity
 	};
 
 	DCMotor motor;
@@ -33,11 +33,16 @@ public:
 					, const Config & config = Config());
 
 	Exception update();
-	void setEnabled(bool);
+
+	// This function tries to navigate
+	Exception checkPolarity();
+	float getOutputPolarity() const;
+
+	void setDriveEnabled(bool);
 	void navigateTo(Encoder::Position);
 	void walk(Encoder::PositionDelta deltaPosition);
 	void pulseAxis(uint16_t pulseCount, float torque, uint16_t durationMillis, uint16_t delayMillis);
-	void printStatus() const;
+	void reportStatus(JsonObject &) const;
 protected:
 	Encoder::Position targetPosition = 0;
 	Encoder::Position nearDistance = 10;
@@ -48,5 +53,5 @@ protected:
 	unsigned long lastFrameTime = 0;
 	Encoder::Position lastFramePosition = 0;
 
-	bool enabled = false;
+	bool driveEnabled = false;
 };
