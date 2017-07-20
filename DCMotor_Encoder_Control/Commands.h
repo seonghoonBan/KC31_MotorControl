@@ -3,164 +3,167 @@
 #include <CmdMessenger.h>
 #include "Exception.h"
 
-char fieldSeparator   = ',';
+char fieldSeparator = ',';
 char commandSeparator = ';';
+char escapeCharacter = '/';
 
-enum Commands : byte {
-  cmdAcknowledge = 0,
-  cmdHelp,
-  cmdError,
-  cmdPrintStatus,
-  cmdEnableAxes,
-  cmdDisableAxes,
-  cmdGetAxisPosition,
-  cmdAxisGoto,
-  cmdAxisWalk,
-  cmdAxisPulse,
-  cmdAxisTare,
+enum Commands : byte
+{
+	noCommand = 0,
+	
+	cmdHelp, // 1
+	cmdError, // 2
+	cmdPrintStatus, // 3
+	cmdEnableDrive, // 4
+	cmdDisableDrive, // 5
+	cmdGetPosition, // 6
+	cmdGotoPosition, // 7
+	cmdWalk, // 8
+	cmdPulse, // 9
+	cmdTare, // 10
 
-
-  reponseGetAxisPosition
+	responseAcknowledge,
+	responseText,
+	reponseGetPosition
 };
 
-CmdMessenger cmdMessenger = CmdMessenger(Serial, fieldSeparator, commandSeparator);
+CmdMessenger cmdMessenger = CmdMessenger(Serial, fieldSeparator, commandSeparator, escapeCharacter);
 
 void attachCommandCallbacks();
 void printStatus();
-void enableAxes();
-void disableAxes();
-void axisGoto(uint8_t axisIndex, long long position);
-void axisWalk(uint8_t axisIndex, long long deltaPosition);
-void axisPulse(uint8_t axisIndex, uint16_t pulseCount, float torque, uint16_t durationMillis, uint16_t delayMillis);
-void axisTare(uint8_t axisIndex, long long positionMark);
-long long getAxisPosition(uint8_t axisIndex);
+void enableDrive();
+void disableDrive();
+void gotoPosition(Encoder::Position position);
+void walk(Encoder::PositionDelta deltaPosition);
+void pulse(uint16_t pulseCount, float torque, uint16_t durationMillis, uint16_t delayMillis);
+void tare(Encoder::Position positionMark);
 
-void acknowledgeCommand(byte commandIndex) {
-  cmdMessenger.sendCmdStart(cmdAcknowledge);
-  {
-    cmdMessenger.sendCmdArg(commandIndex);
-    cmdMessenger.sendCmdArg("Command recieved");
-  }
-  cmdMessenger.sendCmdEnd();
+Encoder::Position getPosition();
+
+void acknowledgeCommand(byte commandIndex)
+{
+	cmdMessenger.sendBinCmd<byte>(responseAcknowledge, commandIndex);
 }
 
-void onCmdHelp() {
-  acknowledgeCommand(cmdHelp);
+void onCmdHelp()
+{
+	acknowledgeCommand(cmdHelp);
 
-  Serial.println("Available commands:");
-  Serial.println("0   - Acknowledge");
-  Serial.println("1   - Print help");
-  Serial.println("2   - Error");
-  Serial.println("3   - Print status");
-  Serial.println("4   - Enable axes");
-  Serial.println("5   - Disable axes");
-  Serial.println("6   - Get axis position <int axisIndex>");
-  Serial.println("7   - Axis goto <int axisIndex, int position>");
-  Serial.println("8   - Axis walk <int axisIndex, int delta>");
-  Serial.println("9   - Pulse <int axisIndex, int count, float torque, int durationMillis, int delayMillis>");
-  Serial.println("10  - Tare position <int axisIndex, int positionMark>");
+	auto helpString = "Available commands:"
+	"0   - Acknowledge"
+	"1   - Print help"
+	"2   - Error"
+	"3   - Print status"
+	"4   - Enable drive"
+	"5   - Disable drive"
+	"6   - Get axis position"
+	"7   - Goto position <int position>"
+	"8   - Walk <int delta>"
+	"9   - Pulse <int count, float torque, int durationMillis, int delayMillis>"
+	"10  - Tare <int positionMark>";
 
-  Serial.println();
+	cmdMessenger.sendCmd(responseText, helpString);
 }
 
-void onCmdPrintStatus() {
-  acknowledgeCommand(cmdPrintStatus);
+void onCmdPrintStatus()
+{
+	acknowledgeCommand(cmdPrintStatus);
 
-  printStatus();
+	printStatus();
 }
 
-void onCmdDisableAxes() {
-  acknowledgeCommand(cmdDisableAxes);
-  disableAxes();
+void onCmdDisableDrive()
+{
+	acknowledgeCommand(cmdDisableDrive);
+	disableDrive();
 }
 
-void onCmdEnableAxes() {
-  acknowledgeCommand(cmdEnableAxes);
-  enableAxes();
+void onCmdEnableDrive()
+{
+	acknowledgeCommand(cmdEnableDrive);
+	enableDrive();
 }
 
-void sendPositionResponse(uint8_t axisIndex) {
-    cmdMessenger.sendCmdStart(reponseGetAxisPosition);
-    {
-        cmdMessenger.sendCmdArg(axisIndex);
-        cmdMessenger.sendCmdArg((int) getAxisPosition(axisIndex));
-    }
-    cmdMessenger.sendCmdEnd();
+void sendPositionResponse()
+{
+	cmdMessenger.sendBinCmd(reponseGetPosition, getPosition());
 }
 
-void onCmdGetAxisPosition() {
-  acknowledgeCommand(cmdGetAxisPosition);
+void onCmdGetPosition()
+{
+	acknowledgeCommand(cmdGetPosition);
 
-  auto axisIndex = (uint8_t) cmdMessenger.readInt16Arg();
-
-  sendPositionResponse(axisIndex);
+	sendPositionResponse();
 }
 
-void onCmdAxisGoto() {
-  acknowledgeCommand(cmdAxisGoto);
-
-  auto axisIndex = (uint8_t) cmdMessenger.readInt16Arg();
-  axisGoto(axisIndex, (long long) cmdMessenger.readInt32Arg());
+void onCmdGotoPosition()
+{
+	acknowledgeCommand(cmdGotoPosition);
+	auto position = cmdMessenger.readBinArg<Encoder::Position>();
+	gotoPosition(position);
 }
 
-void onCmdAxisWalk() {
-  acknowledgeCommand(cmdAxisWalk);
-
-  auto axisIndex = (uint8_t) cmdMessenger.readInt16Arg();
-  axisWalk(axisIndex, (long long) cmdMessenger.readInt32Arg());
+void onCmdWalk()
+{
+	acknowledgeCommand(cmdWalk);
+	walk(cmdMessenger.readBinArg<Encoder::PositionDelta>());
 }
 
-void onCmdAxisPulse() {
-  acknowledgeCommand(cmdAxisPulse);
+void onCmdPulse()
+{
+	acknowledgeCommand(cmdPulse);
 
-  auto axisIndex = (uint8_t) cmdMessenger.readInt16Arg();
-  auto pulseCount = (uint16_t) cmdMessenger.readInt16Arg();
-  auto torque = cmdMessenger.readFloatArg();
-  auto durationMillis = cmdMessenger.readInt16Arg();
-  auto delayMillis = cmdMessenger.readInt16Arg();
+	auto pulseCount = (uint16_t) cmdMessenger.readBinArg<unsigned int>();
+	auto torque = cmdMessenger.readBinArg<float>();
+	auto durationMillis = cmdMessenger.readBinArg<unsigned int>();
+	auto delayMillis = cmdMessenger.readBinArg<unsigned int>();
 
-  axisPulse(axisIndex, pulseCount, torque, durationMillis, delayMillis);
+	pulse(pulseCount, torque, durationMillis, delayMillis);
 
-  sendPositionResponse(axisIndex);
+	sendPositionResponse();
 }
 
-void onCmdAxisTare() {
-    acknowledgeCommand(cmdAxisTare);
-    auto axisIndex = (uint8_t) cmdMessenger.readInt16Arg();
-    auto positionMark = cmdMessenger.readInt32Arg();
-    axisTare(axisIndex, positionMark);
+void onCmdTare()
+{
+	acknowledgeCommand(cmdTare);
+	auto positionMark = cmdMessenger.readBinArg<Encoder::Position>();
+	tare(positionMark);
 }
 
-void onCmdUnknown() {
-  cmdMessenger.sendCmd(cmdError, Error::UnknownCommand);
-  onCmdHelp();
+void onCmdUnknown()
+{
+	cmdMessenger.sendBinCmd<ErrorType>(cmdError, Error::UnknownCommand);
+	onCmdHelp();
 }
 
-void setupCommands() {
-  Serial.begin(115200);
-  attachCommandCallbacks();
-  cmdMessenger.printLfCr();
-  cmdMessenger.sendCmd(cmdAcknowledge, "Kimchi and Chips' CLMP v 1.0");
+void setupCommands()
+{
+	Serial.begin(115200);
+	attachCommandCallbacks();
+	cmdMessenger.sendCmd(responseText, "Kimchi and Chips' CLMP v 1.0");
 }
 
-void attachCommandCallbacks() {
-  cmdMessenger.attach(onCmdUnknown);
-  cmdMessenger.attach(cmdHelp, onCmdHelp);
-  cmdMessenger.attach(cmdPrintStatus, onCmdPrintStatus);
-  cmdMessenger.attach(cmdEnableAxes, onCmdEnableAxes);
-  cmdMessenger.attach(cmdDisableAxes, onCmdDisableAxes);
-  cmdMessenger.attach(cmdGetAxisPosition, onCmdGetAxisPosition);
-  cmdMessenger.attach(cmdAxisGoto, onCmdAxisGoto);
-  cmdMessenger.attach(cmdAxisWalk, onCmdAxisWalk);
-  cmdMessenger.attach(cmdAxisPulse, onCmdAxisPulse);
-  cmdMessenger.attach(cmdAxisTare, onCmdAxisTare);
+void attachCommandCallbacks()
+{
+	cmdMessenger.attach(onCmdUnknown);
+	cmdMessenger.attach(cmdHelp, onCmdHelp);
+	cmdMessenger.attach(cmdPrintStatus, onCmdPrintStatus);
+	cmdMessenger.attach(cmdEnableDrive, onCmdEnableDrive);
+	cmdMessenger.attach(cmdDisableDrive, onCmdDisableDrive);
+	cmdMessenger.attach(cmdGetPosition, onCmdGetPosition);
+	cmdMessenger.attach(cmdGotoPosition, onCmdGotoPosition);
+	cmdMessenger.attach(cmdWalk, onCmdWalk);
+	cmdMessenger.attach(cmdPulse, onCmdPulse);
+	cmdMessenger.attach(cmdTare, onCmdTare);
 }
 
-void sendException(const Exception & exception) {
-    cmdMessenger.sendCmdStart(cmdError);
-    cmdMessenger.sendCmdArg(exception.errorNumber);
-    for(uint8_t i=0; i<exception.argumentCount; i++) {
-        cmdMessenger.sendCmdArg(exception.arguments[i]);
-    }
-    cmdMessenger.sendCmdEnd();
+void sendException(const Exception &exception)
+{
+	cmdMessenger.sendCmdStart(cmdError);
+	cmdMessenger.sendCmdBinArg<int>(exception.errorNumber);
+	for (uint8_t i = 0; i < exception.argumentCount; i++)
+	{
+		cmdMessenger.sendCmdBinArg<int>(exception.arguments[i]);
+	}
+	cmdMessenger.sendCmdEnd();
 }

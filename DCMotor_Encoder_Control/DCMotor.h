@@ -1,53 +1,64 @@
 #pragma once
 
-class DCMotor {
-public:
-  struct Pins {
-    int enable;
-    int A;
-    int B;
-  };
+#include <Arduino.h>
 
-  void setup(const Pins & pins) {
-    this->pins = pins;
+class DCMotor
+{
+  public:
+	struct Pins
+	{
+		int enable;
+		int A;
+		int B;
+	};
 
-    pinMode(this->pins.enable, OUTPUT);
-    pinMode(this->pins.A, OUTPUT);
-    pinMode(this->pins.B, OUTPUT);
+	void setup(const Pins &pins)
+	{
+		this->pins = pins;
 
-    digitalWrite(this->pins.enable, LOW);
-    digitalWrite(this->pins.A, LOW);
-    digitalWrite(this->pins.B, LOW);
+		pinMode(this->pins.enable, OUTPUT);
+		pinMode(this->pins.A, OUTPUT);
+		pinMode(this->pins.B, OUTPUT);
 
-    this->setTorque(0.0f);
-  }
+		digitalWrite(this->pins.enable, LOW);
+		digitalWrite(this->pins.A, LOW);
+		digitalWrite(this->pins.B, LOW);
 
-  void setTorque(float torque) {
-    if(torque == 0.0f) {
-      digitalWrite(this->pins.enable, LOW);
-      digitalWrite(this->pins.A, LOW);
-      digitalWrite(this->pins.B, LOW);
-    } else {
-      bool direction = torque > 0;
+		this->setTorque(0.0f);
+	}
 
-      if(abs(torque) > 1.0f) {
-        torque /= abs(torque);
-      }
-      digitalWrite(this->pins.A, direction);
-      digitalWrite(this->pins.B, !direction);
-  
-      analogWrite(this->pins.enable, (255.0f) * abs(torque));  
-    }
+	void setTorque(float torque)
+	{
+		if (torque == 0.0f)
+		{
+			digitalWrite(this->pins.enable, LOW);
+			digitalWrite(this->pins.A, LOW);
+			digitalWrite(this->pins.B, LOW);
+		}
+		else
+		{
+			bool direction = torque > 0;
 
-    this->torque = torque;
-  }
+			if (abs(torque) > 1.0f)
+			{
+				torque /= abs(torque);
+			}
+			digitalWrite(this->pins.A, direction);
+			digitalWrite(this->pins.B, !direction);
 
-  void printStatus() {
-    Serial.print("Torque : ");
-    Serial.println(this->torque);
-  }
-protected:
-  Pins pins;
-  float torque = 0.0f;
+			analogWrite(this->pins.enable, (255.0f) * abs(torque));
+		}
+
+		this->torque = torque;
+	}
+
+	void printStatus() const
+	{
+		Serial.print("Torque : ");
+		Serial.println(this->torque);
+	}
+
+  protected:
+	Pins pins;
+	float torque = 0.0f;
 };
-

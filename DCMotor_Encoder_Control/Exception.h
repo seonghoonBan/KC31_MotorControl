@@ -1,6 +1,7 @@
 #pragma once
 
-enum Error : uint32_t {
+typedef unsigned long ErrorType;
+enum Error : ErrorType {
     NoError = 0,
     
     UnknownCommand,

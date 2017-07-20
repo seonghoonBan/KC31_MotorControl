@@ -48,13 +48,13 @@ void Encoder::update() {
 }
 
 //----------
-long long Encoder::getPosition() {
+Encoder::Position Encoder::getPosition() const {
     this->processStateBuffer();
     return this->position;
 }
 
 //----------
-void Encoder::tarePosition(long long positionMark) {
+void Encoder::tarePosition(Position positionMark) {
     this->position = positionMark;
 }
 
@@ -64,7 +64,7 @@ unsigned long Encoder::getErrorCount() const {
 }
 
 //----------
-void Encoder::printStatus() {
+void Encoder::printStatus() const {
   Serial.print("Position : ");
   Serial.println((int) this->getPosition());
 
@@ -115,7 +115,7 @@ void Encoder::writeStateBuffer(int8_t state) {
 }
 
 //----------
-void Encoder::processStateBuffer() {
+void Encoder::processStateBuffer() const {
     auto & stateCacheRingBufferLocal = this->stateCacheRingBuffer;
 
     while (stateCacheRingBufferLocal.readPosition !=  stateCacheRingBufferLocal.writePosition) {
@@ -133,7 +133,7 @@ void Encoder::processStateBuffer() {
             Serial.println('E');
         }
 
-        this->processState(state);
+        const_cast<Encoder*>(this)->processState(state);
         ++stateCacheRingBufferLocal.readPosition;
         stateCacheRingBufferLocal.readPosition %= StateCacheRingBuffer_SIZE;
     }
