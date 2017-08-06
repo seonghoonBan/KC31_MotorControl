@@ -1,15 +1,21 @@
 #include <Arduino.h>
 
 #include "Axis.h"
+#include "EnvironmentSensor.h"
+
 #include "Commands.h"
-#include <dht.h>
+#include "Screen.h"
 
 Axis axis;
-dht sensors;
+EnvironmentSensor environmentSensor;
+//Screen screen;
 
 void setup() {
     setupCommands();
     axis.setup(DCMotor::Pins {11, 10, 12}, Encoder::Pins {2, 3});
+    //screen.setup();
+    Serial.begin(115200);
+    Serial.println("we're now here");
 }
 
 void loop() {
@@ -58,15 +64,8 @@ void tare(Encoder::Position positionMark) {
     axis.navigateTo(positionMark);
 }
 
-bool getTemperatureAndHumidity(float & temperature, float & humidity) {
-    if(sensors.read22(7) == DHTLIB_OK) {
-        temperature = sensors.temperature;
-        humidity = sensors.humidity;
-        return true;
-    }
-    else {
-        return false;
-    }
+bool getEnvironmentSensorData(float & temperature, float & humidity) {
+    return environmentSensor.getData(temperature, humidity);
 }
 
 Encoder::Position getPosition() {
