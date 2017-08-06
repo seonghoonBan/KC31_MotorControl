@@ -12,7 +12,7 @@
 class Encoder
 {
   public:
-	typedef long Position;
+	typedef int32_t Position;
 	typedef Position PositionDelta;
 	
 	typedef int8_t State;

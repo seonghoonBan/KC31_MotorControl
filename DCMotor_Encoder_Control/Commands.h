@@ -25,11 +25,13 @@ enum Commands : byte
 	cmdWalk, // 9
 	cmdPulse, // 10
 	cmdTare, // 11
+	cmdGetTemperatureAndHumidity, // 12
 
 	responseAcknowledge,
 	responseText,
 	responseStatusReport,
-	reponseGetPosition
+	reponseGetPosition,
+	responseTemperatureAndHumidity
 };
 
 CmdMessenger cmdMessenger = CmdMessenger(Serial, fieldSeparator, commandSeparator, escapeCharacter);
@@ -44,6 +46,7 @@ void gotoPosition(Encoder::Position position);
 void walk(Encoder::PositionDelta deltaPosition);
 void pulse(uint16_t pulseCount, float torque, uint16_t durationMillis, uint16_t delayMillis);
 void tare(Encoder::Position positionMark);
+bool getTemperatureAndHumidity(float &, float &);
 
 void sendException(const Exception &);
 
@@ -75,7 +78,8 @@ void onCmdHelp()
 	"8	- Goto position <int position>"
 	"9	- Walk <int delta>"
 	"10	- Pulse <int count, float torque, int durationMillis, int delayMillis>"
-	"11	- Tare <int positionMark>";
+	"11	- Tare <int positionMark>"
+	"12 - Get temperature and humidity";
 
 	cmdMessenger.sendCmd(responseText, helpString);
 }
@@ -150,6 +154,15 @@ void onCmdPulse()
 
 void onCmdTare()
 {
+	acknowledgeCommand(Commands::cmdGetTemperatureAndHumidity);
+	float temperature, humidity;
+	if(getTemperatureAndHumidity(temperature, humidity)) {
+		cmdMessenger.sendBinCmd(Commands::responseTemperatureAndHumidity, temperature, humidity);
+	}
+}
+
+void onCmdGetTemperatureAndHumidity()
+{
 	acknowledgeCommand(Commands::cmdTare);
 	auto positionMark = cmdMessenger.readBinArg<Encoder::Position>();
 	tare(positionMark);
@@ -181,6 +194,7 @@ void attachCommandCallbacks()
 	cmdMessenger.attach(Commands::cmdWalk, onCmdWalk);
 	cmdMessenger.attach(Commands::cmdPulse, onCmdPulse);
 	cmdMessenger.attach(Commands::cmdTare, onCmdTare);
+	cmdMessenger.attach(Commands::cmdGetTemperatureAndHumidity, onCmdGetTemperatureAndHumidity);
 }
 
 void sendException(const Exception & exception)

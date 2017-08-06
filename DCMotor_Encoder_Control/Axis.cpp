@@ -129,6 +129,7 @@ Exception Axis::checkPolarity() {
 		//wait until stopped
 		bool success = false;
 		for(int i=0; i<100; i++) {
+			//check to see if any motion is detected
 			auto startPosition = this->encoder.getPosition();
 			delay(100);
 			auto endPosition = this->encoder.getPosition();
@@ -197,7 +198,7 @@ void Axis::reportStatus(JsonObject & json) const {
 	
 	{
 		auto & jsonEncoder = json.createNestedObject("encoder");
-		this->encoder.reportStatus(json["encoder"]);
+		this->encoder.reportStatus(jsonEncoder);
 	}
 
 	{

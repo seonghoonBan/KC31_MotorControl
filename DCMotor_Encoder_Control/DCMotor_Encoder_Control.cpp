@@ -2,8 +2,10 @@
 
 #include "Axis.h"
 #include "Commands.h"
+#include <dht.h>
 
 Axis axis;
+dht sensors;
 
 void setup() {
     setupCommands();
@@ -36,6 +38,7 @@ void disableDrive() {
     axis.setDriveEnabled(false);
 }
 
+
 void gotoPosition(Encoder::Position position) {
     axis.navigateTo(position);
 }
@@ -55,6 +58,17 @@ void tare(Encoder::Position positionMark) {
     axis.navigateTo(positionMark);
 }
 
-long getPosition() {
+bool getTemperatureAndHumidity(float & temperature, float & humidity) {
+    if(sensors.read22(7) == DHTLIB_OK) {
+        temperature = sensors.temperature;
+        humidity = sensors.humidity;
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+Encoder::Position getPosition() {
     return axis.encoder.getPosition();
 }
